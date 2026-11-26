@@ -71,27 +71,20 @@ public sealed class Tool(TextWriter output, TextWriter errors, ToolHost host)
         plan.SetAction(result => Guarded(() => Plan(
             result.GetValue(planEnvironment), result.GetValue(outFile), result.GetValue(exitCode), result.GetValue(planPrune), result.GetValue(planVerbose))));
 
-        var apply = new Command("apply", "Apply a saved plan; without one, plan, ask, then apply");
+        var apply = new Command("apply", "Apply a saved plan (--plan); without one, plan, ask, then apply");
         var applyEnvironment = Environment();
-        var planFile = new Argument<string?>("plan") { Description = "A plan saved with plan --out", Arity = ArgumentArity.ZeroOrOne };
-        // The parser hands an option apply doesn't take to this argument; refuse it as an option, not a missing file.
-        planFile.Validators.Add(result =>
-        {
-            foreach (var token in result.Tokens.Where(token => token.Value.StartsWith('-')))
-            {
-                result.AddError($"Unrecognized command or argument '{token.Value}'.");
-            }
-        });
-        var yes = new Option<bool>("--yes", "-y") { Description = "Without a plan, apply without asking" };
-        var applyPrune = Prune("Without a plan, also drop what the database has and the project doesn't");
+        var planOption = new Option<string>("--plan") { Description = "A plan saved with plan --out, to apply exactly that plan", HelpName = "file" };
+        var yes = new Option<bool>("--yes", "-y") { Description = "Without --plan, apply without asking" };
+        var applyPrune = Prune("Without --plan, also drop what the database has and the project doesn't");
         var applyVerbose = Verbose();
-        apply.Arguments.Add(planFile);
         apply.Options.Add(applyEnvironment);
+        apply.Options.Add(planOption);
         apply.Options.Add(yes);
         apply.Options.Add(applyPrune);
         apply.Options.Add(applyVerbose);
         apply.SetAction(result => Guarded(() => Apply(
-            result.GetValue(applyEnvironment), result.GetValue(planFile), result.GetValue(yes), result.GetValue(applyPrune), result.GetValue(applyVerbose))));
+            result.GetValue(applyEnvironment), result.GetValue(planOption), result.GetValue(yes),
+            result.GetValue(applyPrune), result.GetValue(applyVerbose))));
 
         var extract = new Command("extract", "Show how the database's schema differs from the project's Schema/dbo");
         var extractEnvironment = Environment();
@@ -159,17 +152,17 @@ public sealed class Tool(TextWriter output, TextWriter errors, ToolHost host)
     private int Apply(string? environmentName, string? planPath, bool yes, bool prune, bool verbose)
     {
         var project = host.Project();
+        var path = planPath is null ? null : Path.GetFullPath(planPath);
+        if (path is not null && !File.Exists(path))
+        {
+            throw new ToolException($"No plan at {path}.");
+        }
+
         var target = Target(environmentName, readOnly: false);
         Plan plan;
         Deployer deployer;
-        if (planPath is not null)
+        if (path is not null)
         {
-            var path = Path.GetFullPath(planPath);
-            if (!File.Exists(path))
-            {
-                throw new ToolException($"No plan at {path}.");
-            }
-
             plan = PlanFile.Read(File.ReadAllText(path), path, target.Identity);
             output.Write(PlanPrinter.Show(plan, host.Terminal.Colour));
             deployer = Deployer(project, host.Build(verbose));

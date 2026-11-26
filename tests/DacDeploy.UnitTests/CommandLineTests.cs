@@ -34,6 +34,23 @@ public sealed class CommandLineTests
     }
 
     [Fact]
+    public void Help_ListsApplysPlanAsAnOption()
+    {
+        Run("--help").Output.Should().MatchRegex(@"(?m)^\s+apply\s{2,}Apply").And.NotContain("<plan>");
+        Run("apply", "--help").Output.Should().Contain("--plan <file>").And.NotContain("<plan>");
+    }
+
+    [Fact]
+    public void Apply_RefusesAMissingPlanFile_BeforeConnecting()
+    {
+        var apply = Run("apply", "-E", "prod", "--plan", "/nowhere/release.plan.sql");
+
+        apply.ExitCode.Should().Be(1);
+        apply.Errors.Should().Contain("No plan at /nowhere/release.plan.sql.").And.NotContain("Can't reach");
+        tool.Builds.Should().Be(0);
+    }
+
+    [Fact]
     public void ACommandsHelp_ListsItsOptions() =>
         Run("plan", "--help").Output.Should().Contain("--out").And.Contain("--exit-code").And.Contain("--prune").And.Contain("--environment");
 
@@ -93,12 +110,13 @@ public sealed class CommandLineTests
     }
 
     [Fact]
-    public void ASecondPlanFile_IsRefused()
+    public void APlanFileWithoutPlan_IsRefused()
     {
-        var apply = Run("apply", "-E", "prod", "one.plan.sql", "two.plan.sql");
+        var apply = Run("apply", "-E", "prod", "release.plan.sql");
 
         apply.ExitCode.Should().Be(1);
-        apply.Errors.Should().Contain("'two.plan.sql'");
+        apply.Errors.Should().Contain("'release.plan.sql'");
+        tool.Builds.Should().Be(0);
     }
 
     [Fact]
