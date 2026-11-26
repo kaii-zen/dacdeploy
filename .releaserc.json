@@ -1,0 +1,15 @@
+{
+  "branches": ["main"],
+  "plugins": [
+    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
+    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "dotnet pack -c Release -p:Version=${nextRelease.version} -o artifacts",
+        "publishCmd": "dotnet nuget push \"artifacts/*.nupkg\" --api-key \"$NUGET_API_KEY\" --source https://api.nuget.org/v3/index.json"
+      }
+    ],
+    ["@semantic-release/github", { "assets": [{ "path": "artifacts/*.nupkg" }] }]
+  ]
+}

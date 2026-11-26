@@ -128,3 +128,10 @@ dacdeploy does:
 var deployer = new Deployer(new DeploymentFiles(dacpacPath, profilePath, projectDirectory));
 deployer.Deploy(new DeploymentTarget("test", server, database, variables, user, password));
 ```
+
+## Releases
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org): a `fix:` releases a patch version,
+a `feat:` a minor one, and a breaking change (`feat!:`, or a `BREAKING CHANGE:` footer) a major one. To release, run
+the CI workflow on `main` from the Actions tab (`gh workflow run ci.yml --ref main`): it tests, then semantic-release
+tags the version, publishes both packages to nuget.org and writes the GitHub release.
