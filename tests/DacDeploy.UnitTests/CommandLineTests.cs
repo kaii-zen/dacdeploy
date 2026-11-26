@@ -1,8 +1,10 @@
+using Microsoft.Extensions.Configuration;
+
 namespace DacDeploy.UnitTests;
 
 /// <summary>
-/// What dacdeploy refuses before it connects to anything: its arguments, the environment and the login. A server that
-/// refuses connections at once (port 1) stands in for one it can't reach.
+/// What dacdeploy does before it connects to anything: its arguments, the environments, the logins, and what it refuses.
+/// A server that refuses connections at once (port 1) stands in for one it can't reach.
 /// </summary>
 public sealed class CommandLineTests
 {
@@ -129,6 +131,62 @@ public sealed class CommandLineTests
         plan.Errors.Should().Contain("No login for prod: run `dacdeploy login -E prod --read-only`");
         tool.Builds.Should().Be(0);
     }
+
+    [Fact]
+    public void Environments_ListsEachOnesServerDatabaseAndVariables_WithoutConnecting()
+    {
+        var environments = Run("environments");
+
+        environments.ExitCode.Should().Be(0, environments.Errors);
+        environments.Output.Should().MatchRegex(@"(?m)^prod\s+127\.0\.0\.1,1\s+Shop\s+OtherDb=Other\s")
+            .And.MatchRegex(@"(?m)^test\s+127\.0\.0\.1,1\s+ShopTest\s");
+        tool.Builds.Should().Be(0);
+    }
+
+    [Fact]
+    public void Environments_ShowEachLoginAsConfiguredSavedOrNone_WithoutPasswords()
+    {
+        tool.Logins.Save(Unreachable, readOnly: true, new Login("reader", "saved-secret"));
+        var settings = new Dictionary<string, string?>(TwoEnvironments)
+        {
+            ["Environments:prod:User"] = "writer",
+            ["Environments:prod:Password"] = "configured-secret",
+        };
+
+        var environments = Run(settings, "environments");
+
+        environments.Output.Should().MatchRegex(@"(?m)^prod\s.*\sconfigured\s+saved\s*$")
+            .And.MatchRegex(@"(?m)^test\s.*\snone\s+saved\s*$")
+            .And.NotContain("secret");
+    }
+
+    [Fact]
+    public void Environments_SayWhereEachIsDefined_AndWhichFilesTheyCameFrom()
+    {
+        var folder = Directory.CreateTempSubdirectory("Environments");
+        try
+        {
+            var settingsFile = Path.Combine(folder.FullName, "dacdeploy.json");
+            var secretsFile = Path.Combine(folder.FullName, "secrets.json");
+            File.WriteAllText(settingsFile, /*lang=json*/ """{ "Environments": { "prod": { "Server": "db.example.com", "Database": "Shop" } } }""");
+            File.WriteAllText(secretsFile, /*lang=json*/ """{ "Environments": { "dev": { "Server": "localhost,1433", "Database": "Shop" }, "prod": { "Database": "ShopCopy" } } }""");
+            var configuration = new ConfigurationBuilder().AddJsonFile(settingsFile).AddJsonFile(secretsFile).Build();
+
+            var environments = tool.Run(configuration, "environments");
+
+            environments.Output.Should().MatchRegex(@"(?m)^dev\s.*\suser secrets\s")
+                .And.MatchRegex(@"(?m)^prod\s.*ShopCopy\s.*\sdacdeploy\.json, user secrets\s")
+                .And.Contain(settingsFile).And.Contain(secretsFile);
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Environments_WithNoneConfigured_SaysWhereToAddThem() =>
+        Run([], "environments").Output.Should().Contain("No environments");
 
     [Fact]
     public void Apply_WithOnlyTheReadOnlyLogin_SaysHowToSaveTheOneThatCanWrite()

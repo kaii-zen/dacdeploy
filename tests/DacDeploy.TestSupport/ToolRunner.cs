@@ -19,9 +19,14 @@ public sealed class ToolRunner(DatabaseProject project, string dacpacPath)
     public ToolResult Run(IEnumerable<KeyValuePair<string, string?>> settings, params string[] arguments) =>
         Run(settings, ToolTerminal.None, arguments);
 
-    public ToolResult Run(IEnumerable<KeyValuePair<string, string?>> settings, ToolTerminal terminal, params string[] arguments)
+    public ToolResult Run(IEnumerable<KeyValuePair<string, string?>> settings, ToolTerminal terminal, params string[] arguments) =>
+        Run(new ConfigurationBuilder().AddInMemoryCollection(settings).Build(), terminal, arguments);
+
+    /// <summary>Runs a command with <paramref name="configuration"/> as it is, sources and all.</summary>
+    public ToolResult Run(IConfiguration configuration, params string[] arguments) => Run(configuration, ToolTerminal.None, arguments);
+
+    private ToolResult Run(IConfiguration configuration, ToolTerminal terminal, string[] arguments)
     {
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
         var host = new ToolHost(configuration, Logins, () => project, _ =>
         {
             Builds++;

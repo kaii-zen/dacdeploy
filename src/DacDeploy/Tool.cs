@@ -5,6 +5,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
+using Microsoft.Extensions.Configuration.Json;
 
 namespace DacDeploy.Cli;
 
@@ -104,6 +106,9 @@ public sealed class Tool(TextWriter output, TextWriter errors, ToolHost host)
         login.Options.Add(readOnly);
         login.SetAction(result => Guarded(() => Login(result.GetValue(loginEnvironment), result.GetValue(readOnly))));
 
+        var environments = new Command("environments", "List the configured environments, and where each is defined");
+        environments.SetAction(_ => Guarded(Environments));
+
         var root = new RootCommand(
             "Plans and applies a SQL Server database project to a database: plan shows what applying would change, and apply " +
             "applies a plan you saved and reviewed, or a fresh one once you've seen it and said yes.");
@@ -111,9 +116,10 @@ public sealed class Tool(TextWriter output, TextWriter errors, ToolHost host)
         root.Subcommands.Add(apply);
         root.Subcommands.Add(extract);
         root.Subcommands.Add(login);
+        root.Subcommands.Add(environments);
         root.SetAction(_ =>
         {
-            errors.WriteLine("Pick a command: plan, apply, extract or login. See dacdeploy --help.");
+            errors.WriteLine("Pick a command: plan, apply, extract, login or environments. See dacdeploy --help.");
             return 1;
         });
         return root;
@@ -262,6 +268,95 @@ public sealed class Tool(TextWriter output, TextWriter errors, ToolHost host)
         finally
         {
             tmp.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Lists the configured environments without connecting to anything: where each points, the configuration sources
+    /// that define it, and whether each of its logins is configured, saved in the credential store, or missing. Never a
+    /// password.
+    /// </summary>
+    private int Environments()
+    {
+        var sources = Sources(host.Configuration);
+        if (sources.Count > 0)
+        {
+            output.WriteLine("Sources, each overriding the one before:");
+            var width = sources.Max(source => source.Name.Length);
+            foreach (var source in sources)
+            {
+                output.WriteLine($"  {source.Name.PadRight(width)}  {source.Detail}".TrimEnd());
+            }
+
+            output.WriteLine();
+        }
+
+        var names = DatabaseEnvironment.Names(host.Configuration);
+        if (names.Count == 0)
+        {
+            output.WriteLine($"No environments: add them to {DatabaseProject.SettingsFile}, or your own to your user secrets.");
+            return 0;
+        }
+
+        var rows = new List<string[]> { EnvironmentColumns };
+        foreach (var name in names)
+        {
+            var section = host.Configuration.GetSection("Environments").GetSection(name);
+            var server = section["Server"] ?? "";
+            var variables = section.GetSection("Variables").GetChildren().Select(variable => $"{variable.Key}={variable.Value}");
+            var definedIn = sources.Where(source => source.Defines(name)).Select(source => source.Name).Distinct();
+            rows.Add([
+                name, server, section["Database"] ?? "", string.Join(", ", variables), string.Join(", ", definedIn),
+                LoginState(section, server, readOnly: false), LoginState(section, server, readOnly: true),
+            ]);
+        }
+
+        var widths = Enumerable.Range(0, rows[0].Length).Select(column => rows.Max(row => row[column].Length)).ToList();
+        foreach (var row in rows)
+        {
+            output.WriteLine(string.Join("  ", row.Select((cell, column) => cell.PadRight(widths[column]))).TrimEnd());
+        }
+
+        return 0;
+    }
+
+    private static readonly string[] EnvironmentColumns = ["Environment", "Server", "Database", "Variables", "Defined in", "Login", "Read-only login"];
+
+    /// <summary>Whether an environment's login is configured (its User), saved for its server, or missing.</summary>
+    private string LoginState(IConfigurationSection environment, string server, bool readOnly)
+    {
+        if (environment[readOnly ? "ReadOnlyUser" : "User"] is { Length: > 0 })
+        {
+            return "configured";
+        }
+
+        return server.Length > 0 && host.Logins.Get(server, readOnly) is not null ? "saved" : "none";
+    }
+
+    /// <summary>A configuration source, named as people know it, and whether it sets anything of an environment.</summary>
+    private sealed record Source(string Name, string Detail, IConfigurationProvider Provider)
+    {
+        public bool Defines(string environment) => Provider.GetChildKeys([], $"Environments:{environment}").Any();
+    }
+
+    /// <summary>The configuration's sources in the order they override each other: dacdeploy.json, user secrets, variables.</summary>
+    private static List<Source> Sources(IConfiguration configuration) =>
+        configuration is IConfigurationRoot root ? [.. root.Providers.Select(Describe)] : [];
+
+    private static Source Describe(IConfigurationProvider provider)
+    {
+        switch (provider)
+        {
+            case JsonConfigurationProvider { Source.Path: { } path } json:
+                var file = json.Source.FileProvider?.GetFileInfo(path).PhysicalPath ?? path;
+                // AddUserSecrets reads secrets.json from the secrets' own folder.
+                var name = Path.GetFileName(path) == "secrets.json" ? "user secrets" : Path.GetFileName(path);
+                return new Source(name, file, provider);
+            case EnvironmentVariablesConfigurationProvider:
+                var set = provider.GetChildKeys([], "Environments").Distinct().ToList();
+                return new Source("environment variables", set.Count > 0 ? $"set for {string.Join(", ", set)}" : "none set", provider);
+            default:
+                return new Source(provider.GetType().Name.Replace("ConfigurationProvider", ""), "", provider);
         }
     }
 

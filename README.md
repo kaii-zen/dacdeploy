@@ -86,6 +86,10 @@ dotnet user-secrets set --id <UserSecretsId> "Environments:dev:Server" "localhos
 dotnet user-secrets set --id <UserSecretsId> "Environments:dev:Database" "Shop"
 ```
 
+`dacdeploy environments` lists every environment, whichever source defines it, with its server, database and
+variables, the sources that set it, and whether each of its logins is configured, saved or missing; it never shows a
+password.
+
 In CI, configure one with variables: `DACDEPLOY_Environments__ci__Server`, `DACDEPLOY_Environments__ci__User`,
 `DACDEPLOY_Environments__ci__Password`.
 
@@ -116,8 +120,9 @@ Without a plan file, `apply` plans, shows the plan and asks before applying; `--
 | `apply`   | `[<plan>]`, `--yes`, `--prune`, `--verbose`                                    |
 | `extract` | `--write` (replace the project's `Schema/dbo` with the database's schema), `--verbose` |
 | `login`   | `--read-only`                                                                  |
+| `environments` | lists the environments, where each is defined, and which logins it has, without connecting |
 
-Every command takes `-E <environment>`. `dacdeploy <command> --help` describes each one.
+Every command but `environments` takes `-E <environment>`. `dacdeploy <command> --help` describes each one.
 
 ## In tests
 
