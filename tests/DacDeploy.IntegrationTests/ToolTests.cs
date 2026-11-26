@@ -184,7 +184,7 @@ public sealed class ToolTests(SampleDatabaseFixture fixture) : IDisposable
         var prune = Run("plan", "--prune");
 
         prune.ExitCode.Should().NotBe(0);
-        prune.Errors.Should().Contain("runs no data scripts").And.Contain("Data/Settings.sql");
+        prune.Errors.Should().Contain("runs no data scripts").And.Contain("Settings.sql");
     }
 
     [Fact]

@@ -68,5 +68,5 @@ public enum DataScriptSlot
     After,
 }
 
-/// <summary>A data script part a deployment runs, by path under the project's folder ("Migrations/20261120-backfill.sql").</summary>
-public sealed record DataScriptPart(DataScriptSlot Slot, string File);
+/// <summary>A data script part a deployment runs, by its name inside its folder ("20261120-backfill.sql"), what its record names.</summary>
+public sealed record DataScriptPart(DataScriptSlot Slot, string Name);

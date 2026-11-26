@@ -30,7 +30,7 @@ public sealed class ToolRunner(DatabaseProject project, string dacpacPath, strin
         var host = new ToolHost(configuration, Logins, () => project, _ =>
         {
             Builds++;
-            return dacpacPath;
+            return new BuiltProject(dacpacPath, DataScripts: null);
         }, terminal, commandName);
         using var output = new StringWriter();
         using var errors = new StringWriter();

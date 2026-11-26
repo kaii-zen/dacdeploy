@@ -7,6 +7,22 @@ public enum DataScriptKind
     Migration,
 }
 
+/// <summary>A data script: its kind, its path inside its folder (what its record names), and where the file is.</summary>
+public sealed record DataScript(DataScriptKind Kind, string Name, string Path)
+{
+    /// <summary>
+    /// The scripts a project that declares none has: <c>Data/*.sql</c> (reference data) or <c>Migrations/*.sql</c>
+    /// (one-offs) in <paramref name="projectDirectory"/>, without subfolders, by name.
+    /// </summary>
+    public static IReadOnlyList<DataScript> Conventional(string projectDirectory, DataScriptKind kind)
+    {
+        var folder = System.IO.Path.Combine(projectDirectory, kind == DataScriptKind.ReferenceData ? "Data" : "Migrations");
+        return Directory.Exists(folder)
+            ? [.. Directory.GetFiles(folder, "*.sql").Order(StringComparer.Ordinal).Select(file => new DataScript(kind, System.IO.Path.GetFileName(file), file))]
+            : [];
+    }
+}
+
 /// <summary>
 /// The name of a data script's record on the database, an extended property holding the file's SHA-256: the script's
 /// kind and its path inside its folder (<c>dacdeploy:data:Settings.sql</c>,

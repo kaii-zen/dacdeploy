@@ -1,6 +1,9 @@
 namespace DacDeploy.UnitTests;
 
-/// <summary>How dacdeploy finds the project it works on: the dacdeploy.json in the current folder or the nearest above it.</summary>
+/// <summary>
+/// How dacdeploy finds the project it works on, from the dacdeploy.json in the current folder or the nearest above it,
+/// and what the project's build gives it: the dacpac and the data scripts it declares.
+/// </summary>
 public sealed class DatabaseProjectTests : IDisposable
 {
     private readonly DirectoryInfo root = Directory.CreateTempSubdirectory("DatabaseProjectTests");
@@ -93,7 +96,51 @@ public sealed class DatabaseProjectTests : IDisposable
         find.Should().Throw<ToolException>().WithMessage($"No publish profile at {Path.Combine(root.FullName, "Shop.publish.xml")}*");
     }
 
+    [Fact]
+    public void BuildOutput_GivesTheDacpacAndTheScriptsTheProjectDeclares()
+    {
+        var json = $$"""
+            {
+              "Properties": { "TargetPath": "{{Json(root.FullName)}}/bin/Release/Shop.dacpac" },
+              "Items": {
+                "ReferenceData": [
+                  { "FullPath": "{{Json(root.FullName)}}/reference/lookups/Countries.sql", "RecursiveDir": "lookups/", "Filename": "Countries", "Extension": ".sql" },
+                  { "FullPath": "{{Json(root.FullName)}}/reference/Settings.sql", "RecursiveDir": "", "Filename": "Settings", "Extension": ".sql" }
+                ],
+                "Migration": [
+                  { "FullPath": "{{Json(root.FullName)}}/oneoffs/20990101-backfill.sql", "RecursiveDir": "", "Filename": "20990101-backfill", "Extension": ".sql" }
+                ]
+              }
+            }
+            """;
+
+        var built = BuildOutput.Read(json, root.FullName);
+
+        built.DacpacPath.Should().Be($"{root.FullName}/bin/Release/Shop.dacpac");
+        built.DataScripts.Should().Equal(
+            new DataScript(DataScriptKind.ReferenceData, "lookups/Countries.sql", $"{root.FullName}/reference/lookups/Countries.sql"),
+            new DataScript(DataScriptKind.ReferenceData, "Settings.sql", $"{root.FullName}/reference/Settings.sql"),
+            new DataScript(DataScriptKind.Migration, "20990101-backfill.sql", $"{root.FullName}/oneoffs/20990101-backfill.sql"));
+    }
+
+    [Fact]
+    public void BuildOutput_WithoutDeclaredScripts_TakesDataAndMigrationsNextToTheProject()
+    {
+        Write("Data/Settings.sql", "SELECT 1;");
+        Write("Data/drafts/Unused.sql", "SELECT 2;");
+        Write("Migrations/20990101-backfill.sql", "SELECT 3;");
+        var json = $$"""{ "Properties": { "TargetPath": "{{Json(root.FullName)}}/bin/Release/Shop.dacpac" } }""";
+
+        var built = BuildOutput.Read(json, root.FullName);
+
+        built.DataScripts.Should().Equal(
+            new DataScript(DataScriptKind.ReferenceData, "Settings.sql", Path.Combine(root.FullName, "Data", "Settings.sql")),
+            new DataScript(DataScriptKind.Migration, "20990101-backfill.sql", Path.Combine(root.FullName, "Migrations", "20990101-backfill.sql")));
+    }
+
     public void Dispose() => root.Delete(recursive: true);
+
+    private static string Json(string text) => text.Replace("\\", "\\\\");
 
     private void Write(string path, string content)
     {

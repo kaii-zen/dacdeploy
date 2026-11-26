@@ -165,6 +165,30 @@ public class DataScriptTests(SampleDatabaseFixture fixture)
         (await database.RecordsAsync()).Should().Equal("dacdeploy:data:Settings.sql", "dacdeploy:migration:20990101-older.sql#post");
     }
 
+    [Fact]
+    public async Task ScriptsDeclaredElsewhere_RunAndAreRecordedByTheirNamesInsideTheirFolders()
+    {
+        var folder = Directory.CreateTempSubdirectory("DeclaredScripts");
+        try
+        {
+            var lookups = Directory.CreateDirectory(Path.Combine(folder.FullName, "reference", "lookups"));
+            await File.WriteAllTextAsync(Path.Combine(lookups.FullName, "Countries.sql"), $"{Log}\nGO\n{Insert("declared")}", TestContext.Current.CancellationToken);
+            await database.CreateAsync();
+            var deployer = new Deployer(new DeploymentFiles(
+                SampleDatabaseFixture.DacpacPath, SampleDatabaseFixture.ProfilePath, folder.FullName,
+                [new DataScript(DataScriptKind.ReferenceData, "lookups/Countries.sql", Path.Combine(lookups.FullName, "Countries.sql"))]));
+
+            await Task.Run(() => deployer.Deploy(database.Target), TestContext.Current.CancellationToken);
+
+            (await RunsAsync("declared")).Should().ContainSingle();
+            (await database.RecordsAsync()).Should().Equal("dacdeploy:data:lookups/Countries.sql");
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
     private const string IndexedColumn = """
         SELECT c.name FROM sys.indexes i
         JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.is_included_column = 0

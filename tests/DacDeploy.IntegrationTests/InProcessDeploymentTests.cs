@@ -27,7 +27,7 @@ public sealed class InProcessDeploymentTests(SampleDatabaseFixture fixture)
 
         Plan(database, report);
 
-        report.DataScripts.Should().ContainEquivalentOf(new DataScriptPart(DataScriptSlot.Data, "Data/Settings.sql"));
+        report.DataScripts.Should().ContainEquivalentOf(new DataScriptPart(DataScriptSlot.Data, "Settings.sql"));
     }
 
     [Fact]
