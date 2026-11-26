@@ -13,12 +13,15 @@ namespace DacDeploy.Cli;
 /// <param name="Logins">Where <c>dacdeploy login</c> saves logins.</param>
 /// <param name="Project">The project to work on; throws a <see cref="ToolException"/> when there's none.</param>
 /// <param name="Build">Builds the project, showing everything when verbose, and gives the path of its dacpac.</param>
+/// <param name="CommandName">How dacdeploy was run, for the commands its hints suggest: <c>dacdeploy</c>, or
+/// <c>dotnet dacdeploy</c> for a local tool.</param>
 public sealed record ToolHost(
     IConfiguration Configuration,
     ILoginStore Logins,
     Func<DatabaseProject> Project,
     Func<bool, string> Build,
-    ToolTerminal Terminal);
+    ToolTerminal Terminal,
+    string CommandName = "dacdeploy");
 
 /// <summary>The terminal the tool runs in.</summary>
 /// <param name="InputIsTerminal">Whether someone can answer: apply's question, login's prompts.</param>
@@ -113,7 +116,7 @@ public sealed class Tool(TextWriter output, TextWriter errors, ToolHost host)
         root.Subcommands.Add(login);
         root.SetAction(_ =>
         {
-            errors.WriteLine("Pick a command: plan, apply, extract or login. See dacdeploy --help.");
+            errors.WriteLine($"Pick a command: plan, apply, extract or login. See {host.CommandName} --help.");
             return 1;
         });
         return root;
@@ -273,7 +276,7 @@ public sealed class Tool(TextWriter output, TextWriter errors, ToolHost host)
         var kind = readOnly ? "read-only login" : "login";
         if (!host.Terminal.InputIsTerminal)
         {
-            throw new ToolException("dacdeploy login asks for the user name and password: run it in a terminal.");
+            throw new ToolException($"{host.CommandName} login asks for the user name and password: run it in a terminal.");
         }
 
         RequireReachable(environment.Server);
@@ -380,8 +383,8 @@ public sealed class Tool(TextWriter output, TextWriter errors, ToolHost host)
     {
         var environment = Environment(environmentName);
         var login = LoginFor(environment, readOnly) ?? throw new ToolException(readOnly
-            ? $"No login for {environment.Name}: run `dacdeploy login -E {environment.Name} --read-only`, or without --read-only to save the login that can write."
-            : $"No login for {environment.Name}: run `dacdeploy login -E {environment.Name}`.");
+            ? $"No login for {environment.Name}: run `{host.CommandName} login -E {environment.Name} --read-only`, or without --read-only to save the login that can write."
+            : $"No login for {environment.Name}: run `{host.CommandName} login -E {environment.Name}`.");
         RequireReachable(environment.Server);
         return Target(environment, login);
     }

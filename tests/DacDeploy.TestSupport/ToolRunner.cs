@@ -8,9 +8,9 @@ public sealed record ToolResult(int ExitCode, string Output, string Errors);
 /// <summary>
 /// Runs dacdeploy's commands in-process, on <paramref name="project"/>, with the configuration each run gives and the
 /// logins in <see cref="Logins"/>. Building is left out: <paramref name="dacpacPath"/> stands for the build's output, and
-/// <see cref="Builds"/> counts the commands that got as far as building.
+/// <see cref="Builds"/> counts the commands that got as far as building. <paramref name="commandName"/> is how it was run.
 /// </summary>
-public sealed class ToolRunner(DatabaseProject project, string dacpacPath)
+public sealed class ToolRunner(DatabaseProject project, string dacpacPath, string commandName = "dacdeploy")
 {
     public FakeLogins Logins { get; } = new();
 
@@ -26,7 +26,7 @@ public sealed class ToolRunner(DatabaseProject project, string dacpacPath)
         {
             Builds++;
             return dacpacPath;
-        }, terminal);
+        }, terminal, commandName);
         using var output = new StringWriter();
         using var errors = new StringWriter();
         var exitCode = new Tool(output, errors, host).Run(arguments);

@@ -45,8 +45,22 @@ public static class Program
             new OsLoginStore(),
             () => project ?? throw noProject!,
             verbose => Build(project!, verbose),
-            terminal);
+            terminal,
+            CommandName(Environment.ProcessPath));
         return new Tool(Console.Out, Console.Error, host).Run(args);
+    }
+
+    /// <summary>
+    /// How dacdeploy was run, from the path of the process running it: <c>dotnet dacdeploy</c> when that's the dotnet
+    /// host (a local tool, or <c>dotnet dacdeploy.dll</c>), <c>dacdeploy</c> otherwise (a global tool, or on the PATH).
+    /// </summary>
+    public static string CommandName(string? processPath)
+    {
+        // Either separator, whatever the OS the path comes from.
+        var file = processPath?[(processPath.LastIndexOfAny(['/', '\\']) + 1)..];
+        return string.Equals(Path.GetFileNameWithoutExtension(file), "dotnet", StringComparison.OrdinalIgnoreCase)
+            ? "dotnet dacdeploy"
+            : "dacdeploy";
     }
 
     /// <summary>
