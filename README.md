@@ -50,7 +50,6 @@ dacdeploy works on the `dacdeploy.json` in the current folder or the nearest fol
 | ---------------- | ---------------------------------------- |
 | `Project`        | the one `.sqlproj` next to dacdeploy.json |
 | `PublishProfile` | the project's name with `.publish.xml`    |
-| `UserSecretsId`  | none                                     |
 
 Paths are relative to `dacdeploy.json`. An environment's `Variables` are the SQLCMD variables to deploy with.
 
@@ -78,12 +77,14 @@ leave the data scripts out of the build, and the plans you save there too:
 
 ### Your own environments, and environment variables
 
-Each source overrides the one before: `dacdeploy.json`, then your user secrets (when `dacdeploy.json` names a
-`UserSecretsId`), then environment variables prefixed `DACDEPLOY_`. Add a local database to your user secrets:
+Each source overrides the one before: `dacdeploy.json`, then your user secrets, then environment variables prefixed
+`DACDEPLOY_`. User secrets work as in any .NET project: give the project a `<UserSecretsId>` once, then add a local
+database to yours:
 
 ```sh
-dotnet user-secrets set --id <UserSecretsId> "Environments:dev:Server" "localhost,1433"
-dotnet user-secrets set --id <UserSecretsId> "Environments:dev:Database" "Shop"
+dotnet user-secrets init --project <project folder>
+dotnet user-secrets set "Environments:dev:Server" "localhost,1433" --project <project folder>
+dotnet user-secrets set "Environments:dev:Database" "Shop" --project <project folder>
 ```
 
 In CI, configure one with variables: `DACDEPLOY_Environments__ci__Server`, `DACDEPLOY_Environments__ci__User`,

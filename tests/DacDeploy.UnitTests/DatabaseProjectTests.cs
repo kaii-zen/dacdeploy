@@ -36,6 +36,33 @@ public sealed class DatabaseProjectTests : IDisposable
     }
 
     [Fact]
+    public void Find_ReadsTheUserSecretsIdFromTheProjectFile()
+    {
+        Write("dacdeploy.json", "{}");
+        Write("Shop.sqlproj", """
+            <Project Sdk="Microsoft.Build.Sql/2.4.0">
+              <PropertyGroup>
+                <Name>Shop</Name>
+                <UserSecretsId>3f2b8c1e-0000-4000-8000-000000000001</UserSecretsId>
+              </PropertyGroup>
+            </Project>
+            """);
+        Write("Shop.publish.xml", "<Project />");
+
+        DatabaseProject.Find(root.FullName).UserSecretsId.Should().Be("3f2b8c1e-0000-4000-8000-000000000001");
+    }
+
+    [Fact]
+    public void Find_PrefersTheProjectFilesUserSecretsId_ToDacdeployJsons()
+    {
+        Write("dacdeploy.json", """{ "UserSecretsId": "from-dacdeploy-json" }""");
+        Write("Shop.sqlproj", "<Project><PropertyGroup><UserSecretsId>from-the-project</UserSecretsId></PropertyGroup></Project>");
+        Write("Shop.publish.xml", "<Project />");
+
+        DatabaseProject.Find(root.FullName).UserSecretsId.Should().Be("from-the-project");
+    }
+
+    [Fact]
     public void Find_WithoutDacdeployJson_SaysWhereItLooked()
     {
         var find = () => DatabaseProject.Find(root.FullName);
