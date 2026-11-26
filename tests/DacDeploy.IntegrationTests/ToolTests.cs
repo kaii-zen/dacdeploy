@@ -23,7 +23,7 @@ public sealed class ToolTests(SampleDatabaseFixture fixture) : IDisposable
         plan.Output.Should().Contain("Schema changes").And.Contain("Reference data to update").And.Contain("> Settings.sql");
         File.Exists(PlanFile).Should().BeTrue();
 
-        var apply = Run("apply", PlanFile);
+        var apply = Run("apply", "--plan", PlanFile);
         apply.ExitCode.Should().Be(0, apply.Errors);
 
         var replan = Run("plan", "--exit-code");
@@ -51,7 +51,7 @@ public sealed class ToolTests(SampleDatabaseFixture fixture) : IDisposable
     [Fact]
     public void Apply_RefusesAMissingPlanFile()
     {
-        var apply = Run("apply", PlanFile);
+        var apply = Run("apply", "--plan", PlanFile);
 
         apply.ExitCode.Should().Be(1);
         apply.Errors.Should().Contain("No plan at");
@@ -63,7 +63,7 @@ public sealed class ToolTests(SampleDatabaseFixture fixture) : IDisposable
         await database.CreateAsync();
         Run("plan", "--out", PlanFile).ExitCode.Should().Be(0);
 
-        var apply = Run(new Dictionary<string, string?> { ["Environments:it:Database"] = database.Name + "_other" }, "apply", PlanFile);
+        var apply = Run(new Dictionary<string, string?> { ["Environments:it:Database"] = database.Name + "_other" }, "apply", "--plan", PlanFile);
 
         apply.ExitCode.Should().Be(1);
         apply.Errors.Should().Contain("was planned for");
@@ -150,7 +150,7 @@ public sealed class ToolTests(SampleDatabaseFixture fixture) : IDisposable
         var prune = Run("plan", "--prune", "--out", PlanFile);
         prune.ExitCode.Should().Be(0, prune.Errors);
         prune.Output.Should().Contain("In the database but not in the project, dropped by this plan");
-        var applyPrune = Run("apply", PlanFile);
+        var applyPrune = Run("apply", "--plan", PlanFile);
         applyPrune.ExitCode.Should().Be(0, applyPrune.Errors);
 
         (await database.ScalarAsync<int>("SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Item') AND name = 'Removed'")).Should().Be(0);
@@ -265,7 +265,7 @@ public sealed class ToolTests(SampleDatabaseFixture fixture) : IDisposable
             Path.Combine(SampleDatabaseFixture.Directory, "Data", "Settings.sql"), TestContext.Current.CancellationToken)));
         await database.ExecuteAsync($"EXEC sys.sp_addextendedproperty @name = N'{SettingsRecord}', @value = N'{hash}'");
 
-        var apply = Run("apply", PlanFile);
+        var apply = Run("apply", "--plan", PlanFile);
 
         apply.ExitCode.Should().NotBe(0);
         apply.Errors.Should().Contain("DeploymentContributor 'DacDeploy.PlanCheck'").And.Contain("out of date");
@@ -279,11 +279,11 @@ public sealed class ToolTests(SampleDatabaseFixture fixture) : IDisposable
         var plan = Run("plan", "--out", PlanFile);
         plan.ExitCode.Should().Be(0, plan.Errors);
         plan.Output.Should().Contain("Nothing to apply");
-        var unchanged = Run("apply", PlanFile);
+        var unchanged = Run("apply", "--plan", PlanFile);
         unchanged.ExitCode.Should().Be(0, unchanged.Errors);
         await database.ExecuteAsync($"EXEC sys.sp_dropextendedproperty @name = N'{SettingsRecord}'");
 
-        var apply = Run("apply", PlanFile);
+        var apply = Run("apply", "--plan", PlanFile);
 
         apply.ExitCode.Should().NotBe(0);
         apply.Errors.Should().Contain("out of date");

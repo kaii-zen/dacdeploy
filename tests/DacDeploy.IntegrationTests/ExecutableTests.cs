@@ -46,7 +46,7 @@ public sealed class ExecutableTests(SampleDatabaseFixture fixture) : IDisposable
         plan.Errors.Should().NotContain("Analyzing deployment plan");
         File.Exists(Path.Combine(WorkingDirectory, "release.plan.sql")).Should().BeTrue();
 
-        var apply = await RunAsync("apply", "release.plan.sql");
+        var apply = await RunAsync("apply", "--plan", "release.plan.sql");
         apply.ExitCode.Should().Be(0, apply.Errors);
         (await database.ScalarAsync<int>("SELECT COUNT(*) FROM dbo.Setting")).Should().Be(1);
 

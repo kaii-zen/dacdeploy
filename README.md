@@ -105,15 +105,15 @@ login and fall back to the one that can write.
 
 ```sh
 dacdeploy plan -E prod --out release.plan.sql   # build the project, show the plan, save it
-dacdeploy apply -E prod release.plan.sql        # apply the reviewed plan
+dacdeploy apply -E prod --plan release.plan.sql # apply the reviewed plan
 ```
 
-Without a plan file, `apply` plans, shows the plan and asks before applying; `--yes` applies without asking.
+Without `--plan`, `apply` plans, shows the plan and asks before applying; `--yes` applies without asking.
 
 | Command   | Options                                                                        |
 | --------- | ------------------------------------------------------------------------------ |
 | `plan`    | `--out <file>`, `--exit-code` (exit 2 when there are changes), `--prune`, `--verbose` |
-| `apply`   | `[<plan>]`, `--yes`, `--prune`, `--verbose`                                    |
+| `apply`   | `--plan <file>`, `--yes`, `--prune`, `--verbose`                               |
 | `extract` | `--write` (replace the project's `Schema/dbo` with the database's schema), `--verbose` |
 | `login`   | `--read-only`                                                                  |
 
