@@ -189,6 +189,26 @@ public sealed class CommandLineTests
         Run([], "environments").Output.Should().Contain("No environments");
 
     [Fact]
+    public void Hints_NameTheCommandTheWayItWasRun()
+    {
+        var localTool = new ToolRunner(
+            new DatabaseProject("/nowhere/Shop.sqlproj", "/nowhere/Shop.publish.xml", UserSecretsId: null), "/nowhere/Shop.dacpac", "dotnet dacdeploy");
+
+        localTool.Run(TwoEnvironments, "plan", "-E", "prod").Errors.Should().Contain("run `dotnet dacdeploy login -E prod --read-only`");
+        localTool.Run(TwoEnvironments, "login", "-E", "prod").Errors.Should().Contain("dotnet dacdeploy login asks for the user name and password");
+        localTool.Run(TwoEnvironments).Errors.Should().Contain("See dotnet dacdeploy --help.");
+    }
+
+    [Theory]
+    [InlineData("/usr/share/dotnet/dotnet", "dotnet dacdeploy")]
+    [InlineData(@"C:\Program Files\dotnet\dotnet.exe", "dotnet dacdeploy")]
+    [InlineData("/home/me/.dotnet/tools/dacdeploy", "dacdeploy")]
+    [InlineData(@"C:\Users\me\.dotnet\tools\dacdeploy.exe", "dacdeploy")]
+    [InlineData(null, "dacdeploy")]
+    public void TheCommand_IsDotnetDacdeploy_WhenDotnetRunsIt(string? processPath, string command) =>
+        Program.CommandName(processPath).Should().Be(command);
+
+    [Fact]
     public void Apply_WithOnlyTheReadOnlyLogin_SaysHowToSaveTheOneThatCanWrite()
     {
         tool.Logins.Save(Unreachable, readOnly: true, new Login("reader", "secret"));

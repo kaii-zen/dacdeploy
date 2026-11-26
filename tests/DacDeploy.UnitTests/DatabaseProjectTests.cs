@@ -24,7 +24,7 @@ public sealed class DatabaseProjectTests : IDisposable
     [Fact]
     public void Find_UsesTheProjectProfileAndUserSecretsDacdeployJsonNames()
     {
-        Write("dacdeploy.json", """{ "Project": "src/Db/Db.sqlproj", "PublishProfile": "deploy.xml", "UserSecretsId": "abc" }""");
+        Write("dacdeploy.json", /*lang=json*/ """{ "Project": "src/Db/Db.sqlproj", "PublishProfile": "deploy.xml", "UserSecretsId": "abc" }""");
         Write("src/Db/Db.sqlproj", "<Project />");
         Write("deploy.xml", "<Project />");
 
@@ -33,6 +33,33 @@ public sealed class DatabaseProjectTests : IDisposable
         project.ProjectPath.Should().Be(Path.Combine(root.FullName, "src", "Db", "Db.sqlproj"));
         project.ProfilePath.Should().Be(Path.Combine(root.FullName, "deploy.xml"));
         project.UserSecretsId.Should().Be("abc");
+    }
+
+    [Fact]
+    public void Find_ReadsTheUserSecretsIdFromTheProjectFile()
+    {
+        Write("dacdeploy.json", "{}");
+        Write("Shop.sqlproj", """
+            <Project Sdk="Microsoft.Build.Sql/2.4.0">
+              <PropertyGroup>
+                <Name>Shop</Name>
+                <UserSecretsId>3f2b8c1e-0000-4000-8000-000000000001</UserSecretsId>
+              </PropertyGroup>
+            </Project>
+            """);
+        Write("Shop.publish.xml", "<Project />");
+
+        DatabaseProject.Find(root.FullName).UserSecretsId.Should().Be("3f2b8c1e-0000-4000-8000-000000000001");
+    }
+
+    [Fact]
+    public void Find_PrefersTheProjectFilesUserSecretsId_ToDacdeployJsons()
+    {
+        Write("dacdeploy.json", /*lang=json*/ """{ "UserSecretsId": "from-dacdeploy-json" }""");
+        Write("Shop.sqlproj", "<Project><PropertyGroup><UserSecretsId>from-the-project</UserSecretsId></PropertyGroup></Project>");
+        Write("Shop.publish.xml", "<Project />");
+
+        DatabaseProject.Find(root.FullName).UserSecretsId.Should().Be("from-the-project");
     }
 
     [Fact]

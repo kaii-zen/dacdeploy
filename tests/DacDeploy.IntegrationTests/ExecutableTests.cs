@@ -104,7 +104,7 @@ public sealed class ExecutableTests(SampleDatabaseFixture fixture) : IDisposable
 
         File.Copy(Path.Combine(Repository, "global.json"), Path.Combine(copy.FullName, "global.json"));
 
-        File.WriteAllText(Path.Combine(copy.FullName, DatabaseProject.SettingsFile), """
+        File.WriteAllText(Path.Combine(copy.FullName, DatabaseProject.SettingsFile), /*lang=json*/ """
             {
               "Environments": {
                 "it": { "Variables": { "OtherDb": "Other" } }
