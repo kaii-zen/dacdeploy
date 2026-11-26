@@ -24,7 +24,7 @@ public sealed class DatabaseProjectTests : IDisposable
     [Fact]
     public void Find_UsesTheProjectProfileAndUserSecretsDacdeployJsonNames()
     {
-        Write("dacdeploy.json", """{ "Project": "src/Db/Db.sqlproj", "PublishProfile": "deploy.xml", "UserSecretsId": "abc" }""");
+        Write("dacdeploy.json", /*lang=json*/ """{ "Project": "src/Db/Db.sqlproj", "PublishProfile": "deploy.xml", "UserSecretsId": "abc" }""");
         Write("src/Db/Db.sqlproj", "<Project />");
         Write("deploy.xml", "<Project />");
 
@@ -55,7 +55,7 @@ public sealed class DatabaseProjectTests : IDisposable
     [Fact]
     public void Find_PrefersTheProjectFilesUserSecretsId_ToDacdeployJsons()
     {
-        Write("dacdeploy.json", """{ "UserSecretsId": "from-dacdeploy-json" }""");
+        Write("dacdeploy.json", /*lang=json*/ """{ "UserSecretsId": "from-dacdeploy-json" }""");
         Write("Shop.sqlproj", "<Project><PropertyGroup><UserSecretsId>from-the-project</UserSecretsId></PropertyGroup></Project>");
         Write("Shop.publish.xml", "<Project />");
 
