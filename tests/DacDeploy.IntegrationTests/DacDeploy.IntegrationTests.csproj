@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- On the newest .NET installed: the SDK in global.json brings .NET 10, not the .NET 8 the projects target. -->
+    <RollForward>Major</RollForward>
+    <IsTestProject>true</IsTestProject>
+    <!-- SampleDatabase/ is a project of its own; the items below bring what the tests need into the output. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);SampleDatabase/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AwesomeAssertions" Version="9.6.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Testcontainers.MsSql" Version="4.17.0" />
+    <PackageReference Include="xunit.v3" Version="3.0.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="AwesomeAssertions" />
+    <Using Include="DacDeploy" />
+    <Using Include="DacDeploy.Cli" />
+    <Using Include="DacDeploy.TestSupport" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DacDeploy.TestSupport\DacDeploy.TestSupport.csproj" />
+    <ProjectReference Include="SampleDatabase\SampleDatabase.sqlproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- SampleDatabase as the tests deploy it: the dacpac, the publish profile, Data/. -->
+    <Content Include="SampleDatabase\bin\$(Configuration)\SampleDatabase.dacpac" Link="SampleDatabase\SampleDatabase.dacpac" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="SampleDatabase\SampleDatabase.publish.xml" Link="SampleDatabase\SampleDatabase.publish.xml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="SampleDatabase\Data\**\*.sql" Link="SampleDatabase\Data\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

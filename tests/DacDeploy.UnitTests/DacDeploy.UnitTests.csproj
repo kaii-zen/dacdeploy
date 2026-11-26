@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- On the newest .NET installed: the SDK in global.json brings .NET 10, not the .NET 8 the projects target. -->
+    <RollForward>Major</RollForward>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AwesomeAssertions" Version="9.6.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit.v3" Version="3.0.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="AwesomeAssertions" />
+    <Using Include="DacDeploy" />
+    <Using Include="DacDeploy.Cli" />
+    <Using Include="DacDeploy.TestSupport" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Plans\*.plan.sql;Plans\*.shown.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DacDeploy.TestSupport\DacDeploy.TestSupport.csproj" />
+  </ItemGroup>
+
+</Project>

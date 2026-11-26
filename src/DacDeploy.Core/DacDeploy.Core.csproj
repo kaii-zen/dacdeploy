@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Plans and applies a dacpac with the contributors in this assembly; dacdeploy is its command line. -->
+    <IsPackable>true</IsPackable>
+    <PackageId>DacDeploy.Core</PackageId>
+    <RootNamespace>DacDeploy</RootNamespace>
+    <Description>What dacdeploy deploys with: plans and applies a SQL Server database project with DacFx, keeping what isn't in the project, running its data scripts, and checking a saved plan before applying it.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SqlServer.DacFx" Version="162.5.57" />
+  </ItemGroup>
+
+</Project>

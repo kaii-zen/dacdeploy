@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- What the unit and integration tests share: running dacdeploy in-process. -->
+
+  <ItemGroup>
+    <Using Include="DacDeploy" />
+    <Using Include="DacDeploy.Cli" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DacDeploy\DacDeploy.csproj" />
+  </ItemGroup>
+
+</Project>

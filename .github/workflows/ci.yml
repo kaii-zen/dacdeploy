@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # The tests take minutes; a stuck run fails at this instead of after GitHub's six hours.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # The tools mise.toml names, as on a developer's machine: .NET at global.json's version.
+      - uses: jdx/mise-action@v5
+      - run: dotnet build -c Release
+      - run: dotnet test tests/DacDeploy.UnitTests -c Release --no-build
+      # SQL Server runs in Docker, through Testcontainers.
+      - run: dotnet test tests/DacDeploy.IntegrationTests -c Release --no-build
+
+  publish:
+    # A version tag, such as v1.2.0, publishes both packages to nuget.org.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      # nuget.org trusted publishing: a short-lived key for this run, instead of a stored one.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      # The tools mise.toml names, as on a developer's machine: .NET at global.json's version.
+      - uses: jdx/mise-action@v5
+      - run: dotnet pack -c Release -p:Version=${GITHUB_REF_NAME#v} -o artifacts
+      - uses: NuGet/login@v1
+        id: nuget
+        with:
+          user: ${{ vars.NUGET_USER }}
+      - run: dotnet nuget push "artifacts/*.nupkg" --api-key ${{ steps.nuget.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json

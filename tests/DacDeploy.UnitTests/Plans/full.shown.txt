@@ -1,0 +1,21 @@
+Plan for Shop on localhost,1433
+
+Migrations to run before the schema changes:
+  > 20261120-pre-and-post.sql
+
+Schema changes:
+  + create  [dbo].[NewView]
+  ~ alter   [dbo].[Item]
+
+Reference data to update:
+  > Settings.sql
+
+Migrations to run after the schema changes:
+  > 20261120-pre-and-post.sql
+  > 20261121-backfill.sql
+
+In the database but not in the project, kept (drop with --prune):
+    view    [dbo].[OldView]
+    column  [dbo].[Item].[Removed] (made nullable)
+
+2 schema changes, 4 scripts to run. 2 objects not in the project kept.

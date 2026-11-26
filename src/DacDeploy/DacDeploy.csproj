@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>dacdeploy</AssemblyName>
+    <RootNamespace>DacDeploy.Cli</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <PackageId>dacdeploy</PackageId>
+    <ToolCommandName>dacdeploy</ToolCommandName>
+    <Description>Plans and applies a SQL Server database project (.sqlproj) to a database with DacFx: review a saved plan, then apply exactly that plan.</Description>
+    <!-- Runs on whichever .NET is installed, 8 or later. -->
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Devlooped.CredentialManager" Version="2.7.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.0" />
+    <PackageReference Include="System.CommandLine" Version="3.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="DacDeploy" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DacDeploy.Core\DacDeploy.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.Build.Sql/2.4.0">
+  <PropertyGroup>
+    <Name>SampleDatabase</Name>
+    <!-- The project the integration tests deploy: a few tables, so a deploy takes seconds. It targets SQL Server 2008
+         (Sql100), the T-SQL the contributors generate. -->
+    <DSP>Microsoft.Data.Tools.Schema.Sql.Sql100DatabaseSchemaProvider</DSP>
+    <ModelCollation>1033,CI</ModelCollation>
+    <ProjectGuid>{34852f2f-5137-4df3-b38d-331093d8260e}</ProjectGuid>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Data/ holds the data scripts dacdeploy runs, listed but not built; the plans dacdeploy saves aren't built either. -->
+    <Build Remove="Data/**;**/*.plan.sql" />
+    <None Include="Data/**/*.sql" />
+  </ItemGroup>
+</Project>

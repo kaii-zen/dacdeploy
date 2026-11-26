@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DacDeploy.Core/DacDeploy.Core.csproj" />
+    <Project Path="src/DacDeploy/DacDeploy.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DacDeploy.IntegrationTests/DacDeploy.IntegrationTests.csproj" />
+    <Project Path="tests/DacDeploy.IntegrationTests/SampleDatabase/SampleDatabase.sqlproj" Type="42ea0dbd-9cf1-443e-919e-be9c484e4577" />
+    <Project Path="tests/DacDeploy.TestSupport/DacDeploy.TestSupport.csproj" />
+    <Project Path="tests/DacDeploy.UnitTests/DacDeploy.UnitTests.csproj" />
+  </Folder>
+</Solution>

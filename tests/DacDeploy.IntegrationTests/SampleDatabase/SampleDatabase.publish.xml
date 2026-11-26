@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- How the tests deploy SampleDatabase. dacdeploy adds its contributors itself. -->
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <IgnorePermissions>True</IgnorePermissions>
+    <ScriptDatabaseCompatibility>False</ScriptDatabaseCompatibility>
+    <ScriptDatabaseOptions>False</ScriptDatabaseOptions>
+    <!-- The whole deployment in one transaction, data scripts included: a failure leaves the database as it was. -->
+    <IncludeTransactionalScripts>True</IncludeTransactionalScripts>
+  </PropertyGroup>
+</Project>

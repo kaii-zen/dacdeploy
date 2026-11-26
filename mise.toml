@@ -1,0 +1,3 @@
+[settings]
+# The .NET SDK version comes from global.json.
+idiomatic_version_file_enable_tools = ["dotnet"]

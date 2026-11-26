@@ -1,0 +1,7 @@
+Plan for Shop on localhost,1433
+
+In the database but not in the project, dropped by this plan:
+  - view    [dbo].[OldView]
+  - column  [dbo].[Item].[Removed]
+
+Nothing to apply. 2 objects not in the project dropped.
