@@ -43,8 +43,27 @@ public sealed class DeployerTests(SampleDatabaseFixture fixture)
         Deployer.Apply(database.Target, plan);
 
         Deployer.Plan(database.Target).Changed.Should().BeFalse();
-        (await database.ScalarAsync<int>("SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name = N'DataScripts:Data/Settings.sql'"))
+        (await database.ScalarAsync<int>("SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name = N'dacdeploy:data:Settings.sql'"))
             .Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Plan_ForADatabaseWithOlderRecords_RenamesThem_AndRunsNothingAgain()
+    {
+        var database = await DeployedDatabaseAsync();
+        await database.RenameRecordAsync("dacdeploy:data:Settings.sql", "DataScripts:Data/Settings.sql");
+
+        var plan = Deployer.Plan(database.Target);
+
+        plan.Changed.Should().BeTrue();
+        plan.RecordsToRename.Should().Equal("DataScripts:Data/Settings.sql → dacdeploy:data:Settings.sql");
+        plan.ReferenceData.Should().BeEmpty();
+        plan.SchemaChanges.Should().BeEmpty();
+
+        Deployer.Apply(database.Target, plan);
+
+        (await database.RecordsAsync()).Should().Equal("dacdeploy:data:Settings.sql");
+        Deployer.Plan(database.Target).Changed.Should().BeFalse();
     }
 
     [Fact]
@@ -55,7 +74,7 @@ public sealed class DeployerTests(SampleDatabaseFixture fixture)
         // The reference data now looks run, so Publish's plan leaves it out: not the plan that was reviewed.
         var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(
             Path.Combine(SampleDatabaseFixture.Directory, "Data", "Settings.sql"), TestContext.Current.CancellationToken)));
-        await database.ExecuteAsync($"EXEC sys.sp_addextendedproperty @name = N'DataScripts:Data/Settings.sql', @value = N'{hash}'");
+        await database.ExecuteAsync($"EXEC sys.sp_addextendedproperty @name = N'dacdeploy:data:Settings.sql', @value = N'{hash}'");
 
         var apply = () => Deployer.Apply(database.Target, plan);
 

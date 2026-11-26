@@ -102,11 +102,12 @@ public static partial class PlanFile
         return new Plan(target)
         {
             Prune = prune,
-            MigrationsBefore = lists[0],
-            SchemaChanges = lists[1],
-            ReferenceData = lists[2],
-            MigrationsAfter = lists[3],
-            NotInProject = lists[4],
+            RecordsToRename = lists[0],
+            MigrationsBefore = lists[1],
+            SchemaChanges = lists[2],
+            ReferenceData = lists[3],
+            MigrationsAfter = lists[4],
+            NotInProject = lists[5],
             Sql = sql,
             Fingerprint = fingerprint,
         };

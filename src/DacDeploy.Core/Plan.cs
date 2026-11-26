@@ -40,17 +40,22 @@ public sealed record Plan(PlanTarget Target)
 
     public IReadOnlyList<string> MigrationsAfter { get; init; } = [];
 
+    /// <summary>Records named the older way, renamed as this deployment runs ("DataScripts:Data/x.sql → dacdeploy:data:x.sql").</summary>
+    public IReadOnlyList<string> RecordsToRename { get; init; } = [];
+
     public string Sql { get; init; } = "";
 
     /// <summary><see cref="PlanCheck"/>'s fingerprint of the plan; applying refuses a plan without it.</summary>
     public string Fingerprint { get; init; } = "";
 
     public bool Changed =>
-        SchemaChanges.Count > 0 || MigrationsBefore.Count > 0 || ReferenceData.Count > 0 || MigrationsAfter.Count > 0;
+        SchemaChanges.Count > 0 || MigrationsBefore.Count > 0 || ReferenceData.Count > 0 || MigrationsAfter.Count > 0
+        || RecordsToRename.Count > 0;
 
     /// <summary>The plan's lists, titled, in the order the plan does them; then what the target has that the project doesn't.</summary>
     public IReadOnlyList<(string Title, IReadOnlyList<string> Items)> Sections =>
     [
+        ("Records to rename from their older names", RecordsToRename),
         ("Migrations to run before the schema changes", MigrationsBefore),
         ("Schema changes", SchemaChanges),
         ("Reference data to update", ReferenceData),

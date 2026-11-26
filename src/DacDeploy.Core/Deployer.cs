@@ -145,6 +145,7 @@ public sealed class Deployer(DeploymentFiles files)
             MigrationsBefore = Files(report, DataScriptSlot.Before, "Migrations/"),
             ReferenceData = Files(report, DataScriptSlot.Data, "Data/"),
             MigrationsAfter = Files(report, DataScriptSlot.After, "Migrations/"),
+            RecordsToRename = [.. report.RecordsToRename.Select(rename => $"{rename.Older} → {rename.Name}")],
             Sql = result.DatabaseScript ?? "",
             Fingerprint = fingerprint,
         };

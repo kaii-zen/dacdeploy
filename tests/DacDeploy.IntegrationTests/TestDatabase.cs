@@ -62,6 +62,32 @@ public sealed class TestDatabase(SampleDatabaseFixture server)
 
     public Task ExecuteAsync(string sql) => server.ExecuteAsync(Name, sql);
 
+    /// <summary>
+    /// Renames a data script's record, keeping its value, as when an older dacdeploy recorded it under another name.
+    /// </summary>
+    public Task RenameRecordAsync(string from, string to) => ExecuteAsync($"""
+        DECLARE @Value sql_variant = (SELECT value FROM sys.extended_properties WHERE class = 0 AND name = N'{from}');
+        EXEC sys.sp_dropextendedproperty @name = N'{from}';
+        EXEC sys.sp_addextendedproperty @name = N'{to}', @value = @Value;
+        """);
+
+    /// <summary>The names of the data scripts' records, of either form, in order.</summary>
+    public async Task<List<string>> RecordsAsync()
+    {
+        await using var connection = await OpenAsync();
+        await using var command = new SqlCommand(
+            "SELECT name FROM sys.extended_properties WHERE class = 0 AND (name LIKE N'dacdeploy:%' OR name LIKE N'DataScripts:%') ORDER BY name",
+            connection);
+        await using var reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        var names = new List<string>();
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+        {
+            names.Add(reader.GetString(0));
+        }
+
+        return names;
+    }
+
     /// <summary>The first column of the first row <paramref name="sql"/> returns.</summary>
     public Task<T> ScalarAsync<T>(string sql) => server.ScalarAsync<T>(Name, sql);
 }

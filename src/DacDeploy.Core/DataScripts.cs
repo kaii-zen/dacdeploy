@@ -31,8 +31,6 @@ public sealed partial class DataScripts : DeploymentPlanModifier
 
     public const string RootArgument = "DacDeploy.DataScripts.Root";
 
-    private const string RecordPrefix = "DataScripts:";
-
     private const int MaxRecordName = 128;
 
     private enum Slot
@@ -42,10 +40,13 @@ public sealed partial class DataScripts : DeploymentPlanModifier
         After,
     }
 
-    /// <summary>A part of a script: <paramref name="File"/> is its path under the root ("Migrations/x.sql").</summary>
-    private sealed record Part(string File, string? Section, Slot Slot, string Hash, string Sql)
+    /// <summary>
+    /// A part of a script: <paramref name="File"/> is its path under the root ("Migrations/x.sql"), and
+    /// <paramref name="Name"/> its path inside its folder ("x.sql"), which its record names.
+    /// </summary>
+    private sealed record Part(string File, DataScriptKind Kind, string Name, string? Section, Slot Slot, string Hash, string Sql)
     {
-        public string Record => RecordPrefix + File + (Section is null ? "" : "#" + Section);
+        public string Record => DataScriptRecord.Name(Kind, Name, Section);
     }
 
     [GeneratedRegex(@"^[ \t]*GO[ \t]*(?:--[^\r\n]*)?\r?$", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
@@ -68,10 +69,25 @@ public sealed partial class DataScripts : DeploymentPlanModifier
             Remove(context.PlanHandle, drop);
         }
 
-        var recorded = context.Target.GetObjects(DacQueryScopes.All, ExtendedProperty.TypeClass)
-            .Where(IsRecord)
+        // Each record by its name, an older-named one by the name it stands for; the older ones get renamed.
+        var recorded = new Dictionary<string, string>(StringComparer.Ordinal);
+        var older = new List<(string Older, string Name, string Hash)>();
+        foreach (var property in context.Target.GetObjects(DacQueryScopes.All, ExtendedProperty.TypeClass).Where(IsRecord))
+        {
+            var name = property.Name.Parts[^1];
             // The value is a SQL literal, read as a string through the untyped accessor; the typed one refuses.
-            .ToDictionary(p => p.Name.Parts[^1], p => Unquote(p.GetProperty(ExtendedProperty.Value)?.ToString() ?? ""), StringComparer.Ordinal);
+            var hash = Unquote(property.GetProperty(ExtendedProperty.Value)?.ToString() ?? "");
+            if (name.StartsWith(DataScriptRecord.Prefix, StringComparison.Ordinal))
+            {
+                recorded[name] = hash;
+            }
+            else if (DataScriptRecord.FromOlderName(name) is { } newName)
+            {
+                recorded.TryAdd(newName, hash);
+                older.Add((name, newName, hash));
+            }
+        }
+
         var parts = Parts(root).ToList();
         if (parts.FirstOrDefault(p => p.Slot != Slot.Data && recorded.TryGetValue(p.Record, out var hash) && hash != p.Hash) is { } changed)
         {
@@ -79,11 +95,18 @@ public sealed partial class DataScripts : DeploymentPlanModifier
         }
 
         var pending = parts.Where(p => !recorded.ContainsKey(p.Record) || (p.Slot == Slot.Data && recorded[p.Record] != p.Hash)).ToList();
-        if (pending.Count > 0)
+        if (pending.Count > 0 || older.Count > 0)
         {
-            // Inside the deployment's one transaction: pre parts right after it starts, the others right before it ends.
+            // Inside the deployment's one transaction: renamed records and pre parts right after it starts, the others
+            // right before it ends.
             var (begin, end) = Transaction(context.PlanHandle, steps);
             var pre = begin.Next;
+            foreach (var (olderName, newName, hash) in older.OrderBy(record => record.Older, StringComparer.Ordinal))
+            {
+                AddBefore(context.PlanHandle, pre, new DeploymentScriptStep([Rename(olderName, newName, hash)]));
+                report?.AddRename(olderName, newName);
+            }
+
             foreach (var part in pending.OrderBy(p => p.Slot).ThenBy(p => p.File, StringComparer.Ordinal))
             {
                 AddBefore(context.PlanHandle, part.Slot == Slot.Before ? pre : end, new DeploymentScriptStep(Batches(part)));
@@ -150,7 +173,15 @@ public sealed partial class DataScripts : DeploymentPlanModifier
     }
 
     private static bool IsRecord(TSqlObject? element) =>
-        element?.ObjectType == ExtendedProperty.TypeClass && element.Name.Parts[^1].StartsWith(RecordPrefix, StringComparison.Ordinal);
+        element?.ObjectType == ExtendedProperty.TypeClass && DataScriptRecord.IsRecord(element.Name.Parts[^1]);
+
+    /// <summary>Renames a record named the older way, keeping its value; one already renamed is left as it is.</summary>
+    private static string Rename(string older, string name, string hash) =>
+        $"""
+        EXEC sys.sp_dropextendedproperty @name = N'{older.Replace("'", "''")}';
+        IF NOT EXISTS (SELECT 1 FROM sys.extended_properties WHERE class = 0 AND name = N'{name.Replace("'", "''")}')
+            EXEC sys.sp_addextendedproperty @name = N'{name.Replace("'", "''")}', @value = N'{hash}';
+        """;
 
     /// <summary>An extended property's value as the model holds it, a string literal (N'...'), without the quotes.</summary>
     private static string Unquote(string literal) =>
@@ -161,16 +192,20 @@ public sealed partial class DataScripts : DeploymentPlanModifier
         foreach (var file in Files(root, "Data"))
         {
             var bytes = File.ReadAllBytes(file);
-            yield return new Part(Relative(root, file), null, Slot.Data, Sha256(bytes), File.ReadAllText(file));
+            yield return new Part(
+                Relative(root, file), DataScriptKind.ReferenceData, Relative(Path.Combine(root, "Data"), file), null, Slot.Data, Sha256(bytes),
+                File.ReadAllText(file));
         }
 
         foreach (var file in Files(root, "Migrations"))
         {
             RequireDated(Relative(root, file));
             var bytes = File.ReadAllBytes(file);
+            var name = Relative(Path.Combine(root, "Migrations"), file);
             foreach (var (section, sql) in Sections(Relative(root, file), File.ReadAllText(file)))
             {
-                yield return new Part(Relative(root, file), section, section == "pre" ? Slot.Before : Slot.After, Sha256(bytes), sql);
+                yield return new Part(
+                    Relative(root, file), DataScriptKind.Migration, name, section, section == "pre" ? Slot.Before : Slot.After, Sha256(bytes), sql);
             }
         }
     }
@@ -237,7 +272,8 @@ public sealed partial class DataScripts : DeploymentPlanModifier
     {
         if (part.Record.Length > MaxRecordName)
         {
-            throw new DeploymentFailedException($"{part.File}: its path is too long to record; keep it under {MaxRecordName - RecordPrefix.Length - 5} characters.");
+            throw new DeploymentFailedException(
+                $"{part.File}: its path is too long to record; keep it under {MaxRecordName - part.Record.Length + part.Name.Length} characters.");
         }
 
         var name = part.Record.Replace("'", "''");

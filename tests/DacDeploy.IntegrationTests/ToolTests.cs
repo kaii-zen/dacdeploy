@@ -127,7 +127,7 @@ public sealed class ToolTests(SampleDatabaseFixture fixture) : IDisposable
         tool.Logins.Saved.Should().BeEmpty();
     }
 
-    private const string SettingsRecord = "DataScripts:Data/Settings.sql";
+    private const string SettingsRecord = "dacdeploy:data:Settings.sql";
 
     [Fact]
     public async Task WhatIsNotInTheProject_IsLeftInPlaceAndListed_UntilAPrunePlanDropsIt()
@@ -155,7 +155,7 @@ public sealed class ToolTests(SampleDatabaseFixture fixture) : IDisposable
 
         (await database.ScalarAsync<int>("SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Item') AND name = 'Removed'")).Should().Be(0);
         (await database.ScalarAsync<int>("SELECT COUNT(*) FROM sys.views WHERE name = 'RemovedView'")).Should().Be(0);
-        (await database.ScalarAsync<int>("SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name LIKE N'DataScripts:%'"))
+        (await database.ScalarAsync<int>("SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name LIKE N'dacdeploy:%'"))
             .Should().BePositive("pruning leaves the data scripts' records alone");
     }
 

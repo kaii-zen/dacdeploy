@@ -17,6 +17,7 @@ public sealed class DeploymentReport : IDisposable
     private readonly List<NotInProjectItem> notInProject = [];
     private readonly List<string> rewrittenTables = [];
     private readonly List<DataScriptPart> dataScripts = [];
+    private readonly List<(string Older, string Name)> recordsToRename = [];
 
     public DeploymentReport() => Open[id] = this;
 
@@ -35,11 +36,16 @@ public sealed class DeploymentReport : IDisposable
     /// <summary><see cref="DataScripts"/>: the parts it runs, in the order it runs them.</summary>
     public IReadOnlyList<DataScriptPart> DataScripts => dataScripts;
 
+    /// <summary><see cref="DataScripts"/>: the records named the older way it renames, with their new names.</summary>
+    public IReadOnlyList<(string Older, string Name)> RecordsToRename => recordsToRename;
+
     public void Dispose() => Open.TryRemove(id, out _);
 
     internal void Add(NotInProjectItem item) => notInProject.Add(item);
 
     internal void Add(DataScriptPart part) => dataScripts.Add(part);
+
+    internal void AddRename(string older, string name) => recordsToRename.Add((older, name));
 
     internal void AddRewrittenTable(string table) => rewrittenTables.Add(table);
 

@@ -116,7 +116,7 @@ public class DataScriptTests(SampleDatabaseFixture fixture)
         (await database.ScalarAsync<string>(IndexedColumn)).Should().Be("Status", "the index was dropped and created again inside the transaction");
         (await RunsAsync("atomic")).Should().BeEmpty();
         (await database.ScalarAsync<int>(
-            "SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name = N'DataScripts:Data/zz-test-atomic.sql'")).Should().Be(0);
+            "SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name = N'dacdeploy:data:zz-test-atomic.sql'")).Should().Be(0);
     }
 
     [Fact]
@@ -148,6 +148,21 @@ public class DataScriptTests(SampleDatabaseFixture fixture)
         await database.DeployAsync(Script(path, $"{Log}\nGO\n{Insert("reference", "second")}"));
 
         (await RunsAsync("reference")).Should().Equal("first", "second");
+    }
+
+    [Fact]
+    public async Task OlderRecords_AreRenamed_AndTheirScriptsDontRunAgain()
+    {
+        var scripts = Script("Migrations/20990101-older.sql", $"{Log}\nGO\n{Insert("older")}");
+        await database.DeployAsync(scripts);
+        // As an older dacdeploy recorded them: named after their paths.
+        await database.RenameRecordAsync("dacdeploy:data:Settings.sql", "DataScripts:Data/Settings.sql");
+        await database.RenameRecordAsync("dacdeploy:migration:20990101-older.sql#post", "DataScripts:Migrations/20990101-older.sql#post");
+
+        await database.DeployAsync(scripts);
+
+        (await RunsAsync("older")).Should().ContainSingle();
+        (await database.RecordsAsync()).Should().Equal("dacdeploy:data:Settings.sql", "dacdeploy:migration:20990101-older.sql#post");
     }
 
     private const string IndexedColumn = """
