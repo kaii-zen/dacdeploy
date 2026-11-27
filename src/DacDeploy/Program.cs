@@ -64,11 +64,11 @@ public static class Program
     }
 
     /// <summary>
-    /// Builds the project, so a plan is of the schema as it is now, and gives the path of its dacpac. The build's output
-    /// goes to standard error, so standard output is only the plan: all of it when verbose, otherwise only when the
-    /// build fails.
+    /// Builds the project, so a plan is of the schema as it is now, and gives its dacpac and the data scripts it declares
+    /// (see <see cref="BuildOutput"/>). The build's output goes to standard error, so standard output is only the plan:
+    /// all of it when verbose, otherwise only when the build fails.
     /// </summary>
-    private static string Build(DatabaseProject project, bool verbose)
+    private static BuiltProject Build(DatabaseProject project, bool verbose)
     {
         var (built, buildOutput) = Dotnet(project, ["build", project.ProjectPath, "-c", Configuration, "--nologo", .. verbose ? Array.Empty<string>() : ["-v:q"]]);
         if (verbose || built != 0)
@@ -81,10 +81,12 @@ public static class Program
             throw new ToolException($"{Path.GetFileName(project.ProjectPath)} didn't build; see above.");
         }
 
-        var (found, targetPath) = Dotnet(project, ["msbuild", project.ProjectPath, "-nologo", $"-p:Configuration={Configuration}", "-getProperty:TargetPath"]);
-        return found == 0 && targetPath.Trim() is { Length: > 0 } dacpac
-            ? dacpac
-            : throw new ToolException($"Couldn't tell where {Path.GetFileName(project.ProjectPath)} builds its dacpac: {targetPath.Trim()}");
+        var (found, json) = Dotnet(project, [
+            "msbuild", project.ProjectPath, "-nologo", $"-p:Configuration={Configuration}", "-getProperty:TargetPath",
+            $"-getItem:{BuildOutput.ReferenceDataItem}", $"-getItem:{BuildOutput.MigrationItem}"]);
+        return found == 0
+            ? BuildOutput.Read(json, project.Directory)
+            : throw new ToolException($"Couldn't tell where {Path.GetFileName(project.ProjectPath)} builds its dacpac: {json.Trim()}");
     }
 
     private static (int ExitCode, string Output) Dotnet(DatabaseProject project, IEnumerable<string> arguments)

@@ -7,8 +7,11 @@ namespace DacDeploy;
 /// <summary>A deployment refused or failed: a contributor's refusal, a prune with work pending, or DacFx's own error.</summary>
 public sealed class DeploymentException(string message, Exception? inner = null) : Exception(message, inner);
 
-/// <summary>What deploying needs: the project's dacpac, its publish profile, and the folder holding Data/ and Migrations/.</summary>
-public sealed record DeploymentFiles(string DacpacPath, string ProfilePath, string DataScriptsRoot);
+/// <summary>
+/// What deploying needs: the project's dacpac, its publish profile, the project's folder, and its data scripts; without
+/// a list of them, those in Data/ and Migrations/ in <paramref name="DataScriptsRoot"/>.
+/// </summary>
+public sealed record DeploymentFiles(string DacpacPath, string ProfilePath, string DataScriptsRoot, IReadOnlyList<DataScript>? DataScripts = null);
 
 /// <summary>The database to deploy to, and the environment it belongs to (part of a plan's identity).</summary>
 /// <param name="Variables">The SQLCMD variables to deploy with, by name without $( ).</param>
@@ -132,7 +135,7 @@ public sealed class Deployer(DeploymentFiles files)
         if (prune && report.DataScripts.Count > 0)
         {
             throw new DeploymentException(
-                $"--prune runs no data scripts, and these are pending: {string.Join(", ", report.DataScripts.Select(part => part.File))}. " +
+                $"--prune runs no data scripts, and these are pending: {string.Join(", ", report.DataScripts.Select(part => part.Name))}. " +
                 "Apply them first (plan without --prune), then prune.");
         }
 
@@ -141,10 +144,11 @@ public sealed class Deployer(DeploymentFiles files)
             Prune = prune,
             SchemaChanges = Aligned(operations),
             NotInProject = Aligned(report.NotInProject.Select(item => (item.Type, item.Name + (item.MadeNullable ? " (made nullable)" : "")))),
-            // By file name: each list's title already names the folder.
-            MigrationsBefore = Files(report, DataScriptSlot.Before, "Migrations/"),
-            ReferenceData = Files(report, DataScriptSlot.Data, "Data/"),
-            MigrationsAfter = Files(report, DataScriptSlot.After, "Migrations/"),
+            // By name inside its folder, what its record names.
+            MigrationsBefore = Files(report, DataScriptSlot.Before),
+            ReferenceData = Files(report, DataScriptSlot.Data),
+            MigrationsAfter = Files(report, DataScriptSlot.After),
+            RecordsToRename = [.. report.RecordsToRename.Select(rename => $"{rename.Older} → {rename.Name}")],
             Sql = result.DatabaseScript ?? "",
             Fingerprint = fingerprint,
         };
@@ -166,6 +170,12 @@ public sealed class Deployer(DeploymentFiles files)
         options.AdditionalDeploymentContributorPaths = string.Join(
             ";", Split(options.AdditionalDeploymentContributorPaths).Append(Path.GetDirectoryName(typeof(Deployer).Assembly.Location)));
         var arguments = new List<string> { $"{DataScripts.RootArgument}={files.DataScriptsRoot}", report.Argument };
+        using var manifest = files.DataScripts is { } scripts ? DataScriptManifest.Write(scripts) : null;
+        if (manifest is not null)
+        {
+            arguments.Add($"{DataScripts.ManifestArgument}={manifest.Path}");
+        }
+
         if (expectedFingerprint is not null)
         {
             arguments.Add($"{PlanCheck.ExpectedArgument}={expectedFingerprint}");
@@ -221,10 +231,8 @@ public sealed class Deployer(DeploymentFiles files)
         }
     }
 
-    private static List<string> Files(DeploymentReport report, DataScriptSlot slot, string folder) =>
-        [.. report.DataScripts.Where(part => part.Slot == slot).Select(part => part.File.StartsWith(folder, StringComparison.Ordinal)
-            ? part.File[folder.Length..]
-            : part.File)];
+    private static List<string> Files(DeploymentReport report, DataScriptSlot slot) =>
+        [.. report.DataScripts.Where(part => part.Slot == slot).Select(part => part.Name)];
 
     /// <summary>Two columns, the first padded to the widest.</summary>
     private static List<string> Aligned(IEnumerable<(string First, string Second)> pairs)

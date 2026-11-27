@@ -64,16 +64,23 @@ to set `IncludeTransactionalScripts`, so data scripts run in the deployment's tr
 </Project>
 ```
 
-Data scripts live next to the project, in `Data/` and `Migrations/`. Name one-offs after the date they're written,
-`20261120-backfill-totals.sql`, so they run in order. An SDK-style project builds every `.sql` file under its folder, so
-leave the data scripts out of the build, and the plans you save there too:
+Data scripts are reference data, run again whenever a file changes, and one-offs, run once. They're `Data/*.sql` and
+`Migrations/*.sql` next to the project, unless the project declares its own as `ReferenceData` and `Migration` items.
+Name one-offs after the date they're written, `20261120-backfill-totals.sql`, so they run in order. An SDK-style
+project builds every `.sql` file under its folder, so leave the data scripts out of the build, and the plans you save
+there too:
 
 ```xml
 <ItemGroup>
   <Build Remove="Data/**;Migrations/**;**/*.plan.sql" />
-  <None Include="Data/**/*.sql;Migrations/**/*.sql" />
+  <ReferenceData Include="Data/**/*.sql" />
+  <Migration Include="Migrations/*.sql" />
 </ItemGroup>
 ```
+
+Each script's record on the database names its kind and its path under the item's wildcard
+(`dacdeploy:data:lookups/Countries.sql`), so moving a folder changes no record. A record named the way dacdeploy 0.1
+named them (`DataScripts:Data/Countries.sql`) is renamed by the next deploy, which lists it in its plan.
 
 ### Your own environments, and environment variables
 

@@ -14,14 +14,14 @@ namespace DacDeploy.Cli;
 /// <param name="Configuration">The environments, under <c>Environments:&lt;name&gt;</c> (see <see cref="DatabaseEnvironment"/>).</param>
 /// <param name="Logins">Where <c>dacdeploy login</c> saves logins.</param>
 /// <param name="Project">The project to work on; throws a <see cref="ToolException"/> when there's none.</param>
-/// <param name="Build">Builds the project, showing everything when verbose, and gives the path of its dacpac.</param>
+/// <param name="Build">Builds the project, showing everything when verbose, and gives its dacpac and data scripts.</param>
 /// <param name="CommandName">How dacdeploy was run, for the commands its hints suggest: <c>dacdeploy</c>, or
 /// <c>dotnet dacdeploy</c> for a local tool.</param>
 public sealed record ToolHost(
     IConfiguration Configuration,
     ILoginStore Logins,
     Func<DatabaseProject> Project,
-    Func<bool, string> Build,
+    Func<bool, BuiltProject> Build,
     ToolTerminal Terminal,
     string CommandName = "dacdeploy");
 
@@ -456,8 +456,8 @@ public sealed class Tool(TextWriter output, TextWriter errors, ToolHost host)
         }
     }
 
-    private static Deployer Deployer(DatabaseProject project, string dacpacPath) =>
-        new(new DeploymentFiles(dacpacPath, project.ProfilePath, project.Directory));
+    private static Deployer Deployer(DatabaseProject project, BuiltProject built) =>
+        new(new DeploymentFiles(built.DacpacPath, project.ProfilePath, project.Directory, built.DataScripts));
 
     private Action<string>? Log(bool verbose) => verbose ? errors.WriteLine : null;
 

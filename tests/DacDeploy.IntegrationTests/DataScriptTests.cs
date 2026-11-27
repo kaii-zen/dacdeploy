@@ -116,7 +116,7 @@ public class DataScriptTests(SampleDatabaseFixture fixture)
         (await database.ScalarAsync<string>(IndexedColumn)).Should().Be("Status", "the index was dropped and created again inside the transaction");
         (await RunsAsync("atomic")).Should().BeEmpty();
         (await database.ScalarAsync<int>(
-            "SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name = N'DataScripts:Data/zz-test-atomic.sql'")).Should().Be(0);
+            "SELECT COUNT(*) FROM sys.extended_properties WHERE class = 0 AND name = N'dacdeploy:data:zz-test-atomic.sql'")).Should().Be(0);
     }
 
     [Fact]
@@ -148,6 +148,45 @@ public class DataScriptTests(SampleDatabaseFixture fixture)
         await database.DeployAsync(Script(path, $"{Log}\nGO\n{Insert("reference", "second")}"));
 
         (await RunsAsync("reference")).Should().Equal("first", "second");
+    }
+
+    [Fact]
+    public async Task OlderRecords_AreRenamed_AndTheirScriptsDontRunAgain()
+    {
+        var scripts = Script("Migrations/20990101-older.sql", $"{Log}\nGO\n{Insert("older")}");
+        await database.DeployAsync(scripts);
+        // As an older dacdeploy recorded them: named after their paths.
+        await database.RenameRecordAsync("dacdeploy:data:Settings.sql", "DataScripts:Data/Settings.sql");
+        await database.RenameRecordAsync("dacdeploy:migration:20990101-older.sql#post", "DataScripts:Migrations/20990101-older.sql#post");
+
+        await database.DeployAsync(scripts);
+
+        (await RunsAsync("older")).Should().ContainSingle();
+        (await database.RecordsAsync()).Should().Equal("dacdeploy:data:Settings.sql", "dacdeploy:migration:20990101-older.sql#post");
+    }
+
+    [Fact]
+    public async Task ScriptsDeclaredElsewhere_RunAndAreRecordedByTheirNamesInsideTheirFolders()
+    {
+        var folder = Directory.CreateTempSubdirectory("DeclaredScripts");
+        try
+        {
+            var lookups = Directory.CreateDirectory(Path.Combine(folder.FullName, "reference", "lookups"));
+            await File.WriteAllTextAsync(Path.Combine(lookups.FullName, "Countries.sql"), $"{Log}\nGO\n{Insert("declared")}", TestContext.Current.CancellationToken);
+            await database.CreateAsync();
+            var deployer = new Deployer(new DeploymentFiles(
+                SampleDatabaseFixture.DacpacPath, SampleDatabaseFixture.ProfilePath, folder.FullName,
+                [new DataScript(DataScriptKind.ReferenceData, "lookups/Countries.sql", Path.Combine(lookups.FullName, "Countries.sql"))]));
+
+            await Task.Run(() => deployer.Deploy(database.Target), TestContext.Current.CancellationToken);
+
+            (await RunsAsync("declared")).Should().ContainSingle();
+            (await database.RecordsAsync()).Should().Equal("dacdeploy:data:lookups/Countries.sql");
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
     }
 
     private const string IndexedColumn = """

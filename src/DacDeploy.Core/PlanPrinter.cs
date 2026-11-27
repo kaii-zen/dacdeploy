@@ -48,9 +48,11 @@ public static partial class PlanPrinter
             }
             else
             {
-                foreach (var script in items)
+                // Scripts run; renamed records change.
+                var mark = Mark(ReferenceEquals(items, plan.RecordsToRename) ? "rename" : "run");
+                foreach (var item in items)
                 {
-                    text.Append($"  {Mark("run")} {script}\n");
+                    text.Append($"  {mark} {item}\n");
                 }
             }
         }
@@ -70,6 +72,7 @@ public static partial class PlanPrinter
         {
             (plan.SchemaChanges.Count, One: "schema change", Many: "schema changes"),
             (Count: scripts, One: "script to run", Many: "scripts to run"),
+            (plan.RecordsToRename.Count, One: "record to rename", Many: "records to rename"),
         };
         var done = string.Join(", ", counts.Where(c => c.Count > 0).Select(c => $"{c.Count} {(c.Count == 1 ? c.One : c.Many)}"));
         var summary = done.Length > 0 ? $"{done}." : "Nothing to apply.";

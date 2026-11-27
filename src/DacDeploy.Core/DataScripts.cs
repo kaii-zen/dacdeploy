@@ -7,8 +7,8 @@ using Microsoft.SqlServer.Dac.Model;
 namespace DacDeploy;
 
 /// <summary>
-/// A deployment contributor that runs the data scripts in the same deployment as the schema:
-/// <c>Data/*.sql</c> (reference data) whenever the file changes, and <c>Migrations/*.sql</c> (one-offs) once.
+/// A deployment contributor that runs the data scripts in the same deployment as the schema: reference data whenever
+/// its file changes, and one-offs once.
 /// <para>
 /// A one-off may split into a part that runs before the schema changes (<c>--# pre</c>) and one that runs after
 /// (<c>--# post</c>); one without either runs after. The order is: every pre part, the schema, <c>Data/</c>, every
@@ -16,12 +16,14 @@ namespace DacDeploy;
 /// </para>
 /// <para>
 /// Each part runs with its record, in the deployment's one transaction (see <see cref="RequireAllInTransaction"/>): an
-/// extended property on the database, named after the part, holding the file's SHA-256. DacFx drops extended properties the project doesn't have; this keeps its
-/// own. A one-off whose file changed after a part of it ran stops the deployment.
+/// extended property on the database, named after the part (<see cref="DataScriptRecord"/>), holding the file's SHA-256.
+/// DacFx drops extended properties the project doesn't have; this keeps its own. A record named the older way is renamed
+/// in the same transaction. A one-off whose file changed after a part of it ran stops the deployment.
 /// </para>
 /// <para>
-/// It reads the scripts from the folder given as <see cref="RootArgument"/> (the project's), and records the parts
-/// it runs, in order, in the deployment's <see cref="DeploymentReport"/>.
+/// It takes the scripts from the file <see cref="ManifestArgument"/> names, or else Data/ and Migrations/ in the folder
+/// <see cref="RootArgument"/> names (the project's), and records the parts it runs, in order, in the deployment's
+/// <see cref="DeploymentReport"/>.
 /// </para>
 /// </summary>
 [ExportDeploymentPlanModifier(Id, "1.0.0.0")]
@@ -31,7 +33,8 @@ public sealed partial class DataScripts : DeploymentPlanModifier
 
     public const string RootArgument = "DacDeploy.DataScripts.Root";
 
-    private const string RecordPrefix = "DataScripts:";
+    /// <summary>A file listing the deployment's data scripts; without it, those in Data/ and Migrations/ under the root.</summary>
+    public const string ManifestArgument = "DacDeploy.DataScripts.Manifest";
 
     private const int MaxRecordName = 128;
 
@@ -42,10 +45,13 @@ public sealed partial class DataScripts : DeploymentPlanModifier
         After,
     }
 
-    /// <summary>A part of a script: <paramref name="File"/> is its path under the root ("Migrations/x.sql").</summary>
-    private sealed record Part(string File, string? Section, Slot Slot, string Hash, string Sql)
+    /// <summary>
+    /// A part of a script: <paramref name="File"/> is its path under the root ("Migrations/x.sql"), and
+    /// <paramref name="Name"/> its path inside its folder ("x.sql"), which its record names.
+    /// </summary>
+    private sealed record Part(string File, DataScriptKind Kind, string Name, string? Section, Slot Slot, string Hash, string Sql)
     {
-        public string Record => RecordPrefix + File + (Section is null ? "" : "#" + Section);
+        public string Record => DataScriptRecord.Name(Kind, Name, Section);
     }
 
     [GeneratedRegex(@"^[ \t]*GO[ \t]*(?:--[^\r\n]*)?\r?$", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
@@ -68,26 +74,51 @@ public sealed partial class DataScripts : DeploymentPlanModifier
             Remove(context.PlanHandle, drop);
         }
 
-        var recorded = context.Target.GetObjects(DacQueryScopes.All, ExtendedProperty.TypeClass)
-            .Where(IsRecord)
+        // Each record by its name, an older-named one by the name it stands for; the older ones get renamed.
+        var recorded = new Dictionary<string, string>(StringComparer.Ordinal);
+        var older = new List<(string Older, string Name, string Hash)>();
+        foreach (var property in context.Target.GetObjects(DacQueryScopes.All, ExtendedProperty.TypeClass).Where(IsRecord))
+        {
+            var name = property.Name.Parts[^1];
             // The value is a SQL literal, read as a string through the untyped accessor; the typed one refuses.
-            .ToDictionary(p => p.Name.Parts[^1], p => Unquote(p.GetProperty(ExtendedProperty.Value)?.ToString() ?? ""), StringComparer.Ordinal);
-        var parts = Parts(root).ToList();
+            var hash = Unquote(property.GetProperty(ExtendedProperty.Value)?.ToString() ?? "");
+            if (name.StartsWith(DataScriptRecord.Prefix, StringComparison.Ordinal))
+            {
+                recorded[name] = hash;
+            }
+            else if (DataScriptRecord.FromOlderName(name) is { } newName)
+            {
+                recorded.TryAdd(newName, hash);
+                older.Add((name, newName, hash));
+            }
+        }
+
+        var scripts = context.Arguments.TryGetValue(ManifestArgument, out var manifest)
+            ? DataScriptManifest.Read(manifest)
+            : [.. DataScript.Conventional(root, DataScriptKind.ReferenceData), .. DataScript.Conventional(root, DataScriptKind.Migration)];
+        var parts = Parts(scripts, root).ToList();
         if (parts.FirstOrDefault(p => p.Slot != Slot.Data && recorded.TryGetValue(p.Record, out var hash) && hash != p.Hash) is { } changed)
         {
             throw new DeploymentFailedException($"{changed.File} changed after it ran. A one-off never changes once it has run anywhere; write a new one.");
         }
 
         var pending = parts.Where(p => !recorded.ContainsKey(p.Record) || (p.Slot == Slot.Data && recorded[p.Record] != p.Hash)).ToList();
-        if (pending.Count > 0)
+        if (pending.Count > 0 || older.Count > 0)
         {
-            // Inside the deployment's one transaction: pre parts right after it starts, the others right before it ends.
+            // Inside the deployment's one transaction: renamed records and pre parts right after it starts, the others
+            // right before it ends.
             var (begin, end) = Transaction(context.PlanHandle, steps);
             var pre = begin.Next;
-            foreach (var part in pending.OrderBy(p => p.Slot).ThenBy(p => p.File, StringComparer.Ordinal))
+            foreach (var (olderName, newName, hash) in older.OrderBy(record => record.Older, StringComparer.Ordinal))
+            {
+                AddBefore(context.PlanHandle, pre, new DeploymentScriptStep([Rename(olderName, newName, hash)]));
+                report?.AddRename(olderName, newName);
+            }
+
+            foreach (var part in pending.OrderBy(p => p.Slot).ThenBy(p => p.Name, StringComparer.Ordinal))
             {
                 AddBefore(context.PlanHandle, part.Slot == Slot.Before ? pre : end, new DeploymentScriptStep(Batches(part)));
-                report?.Add(new DataScriptPart(Enum.Parse<DataScriptSlot>(part.Slot.ToString()), part.File));
+                report?.Add(new DataScriptPart(Enum.Parse<DataScriptSlot>(part.Slot.ToString()), part.Name));
             }
         }
 
@@ -150,27 +181,40 @@ public sealed partial class DataScripts : DeploymentPlanModifier
     }
 
     private static bool IsRecord(TSqlObject? element) =>
-        element?.ObjectType == ExtendedProperty.TypeClass && element.Name.Parts[^1].StartsWith(RecordPrefix, StringComparison.Ordinal);
+        element?.ObjectType == ExtendedProperty.TypeClass && DataScriptRecord.IsRecord(element.Name.Parts[^1]);
+
+    /// <summary>Renames a record named the older way, keeping its value; one already renamed is left as it is.</summary>
+    private static string Rename(string older, string name, string hash) =>
+        $"""
+        EXEC sys.sp_dropextendedproperty @name = N'{older.Replace("'", "''")}';
+        IF NOT EXISTS (SELECT 1 FROM sys.extended_properties WHERE class = 0 AND name = N'{name.Replace("'", "''")}')
+            EXEC sys.sp_addextendedproperty @name = N'{name.Replace("'", "''")}', @value = N'{hash}';
+        """;
 
     /// <summary>An extended property's value as the model holds it, a string literal (N'...'), without the quotes.</summary>
     private static string Unquote(string literal) =>
         literal.StartsWith("N'", StringComparison.Ordinal) ? literal[2..^1].Replace("''", "'") : literal.Trim('\'');
 
-    private static IEnumerable<Part> Parts(string root)
+    /// <summary>
+    /// The scripts' parts: reference data whole, one-offs by their sections. <paramref name="root"/>, the project's
+    /// folder, is what messages give a script's path from.
+    /// </summary>
+    private static IEnumerable<Part> Parts(IReadOnlyList<DataScript> scripts, string root)
     {
-        foreach (var file in Files(root, "Data"))
+        foreach (var script in scripts.Where(s => s.Kind == DataScriptKind.ReferenceData).OrderBy(s => s.Name, StringComparer.Ordinal))
         {
-            var bytes = File.ReadAllBytes(file);
-            yield return new Part(Relative(root, file), null, Slot.Data, Sha256(bytes), File.ReadAllText(file));
+            var bytes = File.ReadAllBytes(script.Path);
+            yield return new Part(Relative(root, script.Path), script.Kind, script.Name, null, Slot.Data, Sha256(bytes), File.ReadAllText(script.Path));
         }
 
-        foreach (var file in Files(root, "Migrations"))
+        foreach (var script in scripts.Where(s => s.Kind == DataScriptKind.Migration).OrderBy(s => s.Name, StringComparer.Ordinal))
         {
-            RequireDated(Relative(root, file));
-            var bytes = File.ReadAllBytes(file);
-            foreach (var (section, sql) in Sections(Relative(root, file), File.ReadAllText(file)))
+            var file = Relative(root, script.Path);
+            RequireDated(file);
+            var bytes = File.ReadAllBytes(script.Path);
+            foreach (var (section, sql) in Sections(file, File.ReadAllText(script.Path)))
             {
-                yield return new Part(Relative(root, file), section, section == "pre" ? Slot.Before : Slot.After, Sha256(bytes), sql);
+                yield return new Part(file, script.Kind, script.Name, section, section == "pre" ? Slot.Before : Slot.After, Sha256(bytes), sql);
             }
         }
     }
@@ -184,14 +228,6 @@ public sealed partial class DataScripts : DeploymentPlanModifier
         {
             throw new DeploymentFailedException($"{file}: name one-offs <yyyyMMdd>-<what>.sql (such as 20261120-backfill-client-defaults.sql), so they run in date order.");
         }
-    }
-
-    private static IEnumerable<string> Files(string root, string folder)
-    {
-        var directory = Path.Combine(root, folder);
-        return Directory.Exists(directory)
-            ? Directory.GetFiles(directory, "*.sql").Order(StringComparer.Ordinal)
-            : [];
     }
 
     /// <summary>A one-off's parts: ("post", everything) without directives, else each directive's section.</summary>
@@ -237,7 +273,8 @@ public sealed partial class DataScripts : DeploymentPlanModifier
     {
         if (part.Record.Length > MaxRecordName)
         {
-            throw new DeploymentFailedException($"{part.File}: its path is too long to record; keep it under {MaxRecordName - RecordPrefix.Length - 5} characters.");
+            throw new DeploymentFailedException(
+                $"{part.File}: its path is too long to record; keep it under {MaxRecordName - part.Record.Length + part.Name.Length} characters.");
         }
 
         var name = part.Record.Replace("'", "''");

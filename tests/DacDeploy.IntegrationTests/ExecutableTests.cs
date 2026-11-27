@@ -56,6 +56,25 @@ public sealed class ExecutableTests(SampleDatabaseFixture fixture) : IDisposable
     }
 
     [Fact]
+    public async Task ScriptsTheProjectDeclares_RunFromWhereTheyAre()
+    {
+        await database.CreateAsync();
+        // The reference data moves to reference/, which the project declares as ReferenceData items.
+        Directory.Move(Path.Combine(project.FullName, "Data"), Path.Combine(project.FullName, "reference"));
+        var sqlproj = Path.Combine(project.FullName, "SampleDatabase.sqlproj");
+        var text = await File.ReadAllTextAsync(sqlproj, TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(sqlproj, text.Replace(
+            "<Build Remove=\"Data/**;**/*.plan.sql\" />",
+            "<Build Remove=\"reference/**;**/*.plan.sql\" />\n    <ReferenceData Include=\"reference/*.sql\" />"), TestContext.Current.CancellationToken);
+
+        var apply = await RunAsync("apply", "--yes");
+
+        apply.ExitCode.Should().Be(0, apply.Errors);
+        apply.Output.Should().Contain("> Settings.sql");
+        (await database.RecordsAsync()).Should().Equal("dacdeploy:data:Settings.sql");
+    }
+
+    [Fact]
     public async Task Apply_WithoutAPlanFileOrATerminal_RefusesToAsk()
     {
         await database.CreateAsync();
